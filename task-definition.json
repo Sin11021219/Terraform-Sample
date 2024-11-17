@@ -1,0 +1,114 @@
+
+◆アプリケーションをデプロイするためのタスク定義の作成
+$ mkdir aws && touch aws/task-definition.json
+//タスク定義の作成
+
+{
+    "family": "go-sample-server",
+    "taskRoleArn": "arn:aws:iam::XX:XXXXXXXXXX:role/go-sample-server-ecs-task",
+    "executionRoleArn": "arn:aws:iam::XXXXXXXXXXXX:role/go-simple-server-ecs",
+    "network": "awsvpc",
+    "cpu": "256",
+    "memory": "512",
+    "requiresCompatibilities": ["FARGATE"],
+    "containerDefinitions":[
+        {
+            "name": "go-simple-server",
+            "image": "",
+            "portMapping": [
+                {
+                    "name": "tcp",
+                    "hostport": 8080,
+                    "containerPort":8080
+                }
+            ],
+            "logConfiguration":{
+                "logDriver": "awslog",
+                "options": {
+                    "awslogs-group": "/aws/ecs/go-simple-server",
+                    "awslogs-region": "ap-northeast-1", 
+                    "awaslogs-stream-prefix": "app"
+                }
+            },
+            "essential": true
+        }
+    ]
+
+
+}
+
+//復習2回目
+◆アプリケーションをデプロイするためのタスク定義を作成
+$ mkdir aws && touch aws/task-definition.json
+
+{
+    "family": "do-simple-server",
+    "taskRole": "arn:aws:iam::XXXXXXXXXXXX:role/go-simple-server-ecs-task",
+    "executionRole": "arn:aws:iam::XXXXXXXXXXXX:role/go-simple-server-ecs",
+    "networkmode": "awspvc",
+    "cpu": "256",
+    "memory": "512",
+    "requiresCompatibilities": ["FARGATE"],
+    "containerDefinitions": [
+        {
+            "name": "go-simple-server",
+            "iamge": "",
+            "portMapping": [
+                {
+                "protocol": "tcp",
+                "hostport": 8080,
+                "containerPort": 8080
+                }
+            ],
+      "logconfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+            "awslogs-group": "/aws/ecs/go-simple-sercver",
+            "awslogs-region": "ap-northeast-1",
+            "awslogs-stream-prefix": "app"
+        }
+    },
+    "essential": true
+   }
+ ]
+}
+
+//復習3回目
+//GitHub ActionsによるCI/CDを構築前に、アプリケーションをデプロイするためのタスク定義を作成
+$ mkdir aws && touch aws/task-definition.json
+
+
+{
+    "family": "go-simple-server",
+    "taskRoleArn": "arn:aws:iam::XXXXXXXXXXXX:role/go-simple-server-ecs-task",
+    "executionRole": "arn:aws:iam::XXXXXXXXXXXX:role/go-simple-server-ecs",
+    "networkMode": "awsvpc",
+    "cpu": "256",
+    "memory": "512",
+    "requiresCompatibilities": ["FARGATE"],
+    "containerdefinitions":[
+        {
+            "name": "go-simple-server",
+            "image": "",
+            "portMappings": [
+               {
+                 "protocol": "tcp", 
+                 "hostPort": 8080,
+                 "containerPort": 8080
+               }
+                
+            ],
+     "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+            "awslogs-group": "/aws/ecs/go-simple-server",
+            "awsloga-region": "ap-northeast-1",
+            "awslogs-stream-prefix": "app"
+        }
+     },
+     "essential": true
+        }
+    ]
+
+
+}
