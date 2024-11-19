@@ -1,0 +1,123 @@
+//easytodo//cloudformation/network.yml
+AWSTemplateFormatVersion: 2010-09-09
+
+Parameters:
+ ProjectName:
+  Description: Project Name
+  Type: String
+  Default: EasyTODO
+ TagName:
+  Descripion: Tag name applied to all resources
+  Type: String
+  Default: EasyTODO
+
+Resources:
+=============================================
+VPC
+=============================================
+VPC:
+  Type: AWS::EC2::VPC
+  Properties: 
+    Cidrblocks: 10.0.0.0/16
+    EnableDnsSupport: true
+    EnableDnsHostnames: true
+    Tags:
+     -Key: Name
+      Value: !Sub $(ProjectName)-VPC
+     -Key: project
+      Value:  !Seb $(TagName)
+==============================================
+Subnet
+==============================================
+ALBSubnet1:
+ Type: AWS:EC2:Subnet
+ Properties:
+  VpcId: !Ref VPC
+  AvailabilityZone: !Select [0, !GetAZs ""]
+  CidrBlock: 10.0.1.0/24
+  MapPublicIponLaunch: true
+  Tags:
+   -Key: Name
+    Value: !Sub ${ProjectName}-alb-public-subnet-1a
+    Key: project
+    Value: !Sub ${TagName}
+
+  ALBSubnet2:
+   Type: AWS::EC2::Subnet
+   Properties:
+    VpcId: !Ref VPC
+    AvailabilityZone: [1, !GetAZs ""]
+    CidrBlocks: 10.0.2.0/24
+    MapPublicOnLaunch: true
+    Tags:
+     -Key: Name
+     Value: !Sub ${ProjectName}-alb-public-subnet-1c
+     -Key: project
+     Value: !Sub ${TagName}
+
+  NATSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+     VpcId: !Ref VPC
+     AvailabilityZone: [0, !GetAZs ""]
+     CidrBlock: 10.0.99.0/24
+     MapPublicOnLaunch: true
+     Tags:
+      -Key: Name
+      Value: !Sub ${ProjectName}-nat-public-subnet-1a
+      -Key: project
+      Value: !Sub ${TagName}
+
+  ECSSubnet:
+   Type: AWS::EC2::Subnet
+   Properties:
+    VpcId: !Ref VPC
+    availabilityZone: !Select [0, !GetAZs ""]
+    CidrBlocks: 10.0.100.0/24
+    MapPublicOnLaunch: true
+    Tags:
+     -Key: Name
+     Value: !Sub ${ProjectName}-ecs-private-subnet-1a
+     -Key: project
+     Value: !Sub ${TagName}
+
+    RDSSubnet1:
+     Type: AwS::EC2::Subnet
+     Properties:
+      VpcId: !Ref VPC
+      Availabilityzone: !Select [0, !GetAZs "" ]
+      CideBlocks: 10.0.110.0/24
+      MapPublicIpOnLaunch:
+      Tags: 
+       -Key: Name
+       Value: !Sub ${ProjectName}-rds-private-subnet-1a
+       -Key: project
+       Value: !Sub ${TagName}
+    
+
+    RDSSubnet2:
+     Type: AWS::EC2::Subnet
+     Properties: 
+      VpcId: !Ref VPC
+      availabilityzone: !Select [1, !GetAzs ""]
+      CideBlocks: 10.0.111.0/24
+      MapPublicIpOnLaunch:
+      Tags: 
+       -Key: Name
+       Value: !Sub ${ProjectName}-rds-private-subnet-1c
+       -Key: project
+       Value: !Sub ${TagName}
+    
+    ManagementSubnet:
+      Type: AWS::EC2::Subnet
+      Properties: 
+      VpcId: !Ref VPC
+      avilabilityzone: !Select [0,  !Getzs ""] 
+      cidrBlocks: 10.0.240.0/24
+      MapPublicOnLaunch:
+      Tags: 
+       -Key: Name
+       Value: !Sub ${ProjectName}-management-private-subnet-1a
+       -Key: project
+       Value: !Sub ${TagName}
+    
