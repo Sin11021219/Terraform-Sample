@@ -1,0 +1,144 @@
+Resource:
+
+========================================
+
+AutoScaling
+
+========================================
+//AutoScalingターゲットの作成
+ECSAutoScalingTarget:
+ Type: AWS::ApplicationAutoScaling::ScalableTarget
+ DependsOn: ECSService
+ Properties:
+  MaxCapacity: 2
+  MinCapacity: 1
+  ResourceId: !Sub "service/${Cluster}/${ProjectName}-ecs-service"
+  RoleARN: !GetAtt ECSAutoScalingRole.Arn
+ ScalingDimension: ecs:service:DesiredCount
+ ServiceNamespace: ecs
+
+//スケーリングポリシー(CPU使用率が高い場合にスケールアップ)
+ECSAutoScalingPolicy:
+  Type: AWS::ApplicationAutoScaling::ScalingPolicy
+  Properties: 
+    PolicyName: !Sub ${ProjectName}-ScalingPolicy
+    PolicyType: TargetTrackingScaling
+    ScalingTargetId: !Ref ECSAutoScalingTarget
+    TargetTrackingScalingPolicyConfiguration: 
+     PredefineMetricSpecification:
+      PredefinedMetricType: ECSServiceAverageCPUUtilization
+     TargetValue: 50.0
+     ScaleIndown: 60
+     ScaleOutdown: 60.0
+  ECSAutoScalingRole:
+     Type: AWS::IAM::Role
+     Properties:
+      RoleName: !Sub ${ProjectName}-autoscaling-role
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+      -  Effect: Allow
+         Principal:
+           Service:
+            - application-autoscaling.amazonaws.com
+         Ation: sts:AssumeRole
+      Path: /
+      Pollicies: 
+      - PolicyName: ECSAutoScalingPolicy
+        PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            Effect: Allow
+            Action: 
+              -ecs: UpdateService
+              -ecs: DescribeService
+              -cloudwatch: PutMetricAlarm
+              -cloudwatch: DescribeAlarms
+              -cloudwatch: GetMetricStatistics
+              -application-autoscaling: *
+            Resource: "*"
+      Tags:
+        - Key: Name
+         Value: !Sub ${ProjectName}-autoscaling-role
+        - Key: project
+        Value: !Sub ${TagName}
+
+    
+
+  
+
+
+
+
+//タスク定義(app)
+AppTaskDefinition:
+ Type:
+ Properties:
+   Family: easytodo-app
+   Cpu: 256
+   Memory: 512
+   NetworkMode: awsvpc
+   RequiresCompatibilities:
+   - FARGATE:
+   ExecutionRoleArn: !GetAtt ECSTaskExecutionRole.Arn
+   ContainerDefinitions:
+  - Name: easytodo-app
+    Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/easytodo/app:${ApplicationImageTag}
+    PortMapppings:
+    - ContainerPort: 3000
+      Protocol: tcp
+    Environment:
+    - Name:  NODE_ENV
+      Value: "production"
+    Secrets:
+    - Name: DATABASE_URL
+      ValueFrom: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/easytodo/database-url
+    LogConfiguration: 
+      LogDriver: awslogs
+      Options:
+       awslogs-group: !Sub /${AWS::StackName}/ecs/app
+       awslogs-region: !Ref AWS::Region
+       awslogs-stream-prefix: easytodo
+
+//cloudWatch Logロググループ作成 (app)
+ApplicationLogGroup:
+ Type: AWS::Logs::LogGroup
+ Properties:
+  LogGroupName: !Sub /${AWS::StackName}/ecs/app
+  RetentionInDays: 7
+  Tags:
+   - Key: Name
+   Value: !Sub ${ProjectName}-app-logs
+   - Key: project
+   Value: !Sub ${TagName}
+
+//ECSサービスの作成
+ECSService:
+ Type: AWS::ECS::Service
+ Properties:
+  Cluster: !Ref Cluster
+  ServiceName: !Sub ${ProjectName}-ecs-service
+  DesiredCount: 1
+  TaskDefinition: !Ref AppTaskDefiniton
+  LaunchType: FARGATE
+  LoadBalancers:
+   - ContainerName: easytodo-app
+     ContainerPort: 3000
+    TargetGroupArn: !ImportValue ALBTargetGroup
+  NetworkConfiguration:
+   AwsvpcConfiguration: 
+    Subnets: 
+     - !ImportValue ECSSubnet
+    SecurityGroups:
+     - !Ref ECSTaskSecurityGroup
+    AssignPublicIp: DISABLED
+  Tags:
+   -  Key: Name
+    Value: !Sub ${ProjectName}-ecs-service
+   -  Key:  project
+    Value: !Sub ${TagName}
+
+
+
+  
+
