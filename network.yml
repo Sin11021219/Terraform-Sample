@@ -11,6 +11,25 @@ Parameters:
   Type: String
   Default: EasyTODO
 
+  ManagementImageId: 
+   Type: AWS::SSM::Parameter::Value<String>
+   Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
+
+  
+  DBName:
+   Type: String
+   Default: app_do
+  MasterUsername:
+   Type: String
+   Default: admin
+  MasterUserPassword:
+   Type: String
+   NoEcho: true
+   Description: The master password for the RDS instance
+   MinLength: 8
+   MaxLength: 41
+   
+
 Resources:
 =============================================
 VPC
@@ -46,7 +65,7 @@ ALBSubnet1:
    Type: AWS::EC2::Subnet
    Properties:
     VpcId: !Ref VPC
-    AvailabilityZone: [1, !GetAZs ""]
+    AvailabilityZone: !Select [1, !GetAZs ""]
     CidrBlocks: 10.0.2.0/24
     MapPublicOnLaunch: true
     Tags:
@@ -59,7 +78,7 @@ ALBSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
      VpcId: !Ref VPC
-     AvailabilityZone: [0, !GetAZs ""]
+     AvailabilityZone: !Select [0, !GetAZs ""]
      CidrBlock: 10.0.99.0/24
      MapPublicOnLaunch: true
      Tags:
@@ -120,4 +139,429 @@ ALBSubnet1:
        Value: !Sub ${ProjectName}-management-private-subnet-1a
        -Key: project
        Value: !Sub ${TagName}
-    
+===============================================================
+
+インターネットゲートウェイ
+
+================================================================
+InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+     Tags: 
+    -  Key: Name
+     Value: !Sub  ${ProjectName}-igw
+       Key: project
+     Value: !Sub ${TagName}
+
+//IGWをVPCへアタッチ
+IGWAttachment:
+   Type: AWS::EC2::VPCGatewayAttachment
+   Properties: 
+    InternetGatewayId: !Ref InternetGateway
+    VpcId: !Ref VPC
+
+===============================================================
+
+NATゲートウェイ
+
+===============================================================
+//プライベートサブネットが外部と通信するために、NATゲートウェイを作成
+NatGatewayPublic:
+ Type: AWS::EC2::NatGateway
+ DependsOn: EIP
+ Properties: 
+  AllowcatedId: 
+   Fn::GetAtt:
+    -EIP
+    -AllocationId
+  SubnetId: !Ref NATSubnet
+  Tags:
+  - Key: Name
+  Value: !Sub ${ProjectName}-nat-gateway-public   
+  - Key: project
+  Value: !Sub ${TagName}
+
+  EIP:
+   Type: AWS::EC2::EIP
+   Properties: 
+    Domain: vpc
+    Tags: 
+    - Key: Name
+    Value: !Sub ${ProjectName}-eip
+    - Key: project
+    Value: !Sub ${TagName}
+================================================================
+
+ルートテーブル
+
+================================================================
+//パブリックサブネット用ルートテーブル作成
+PublicRouteTable:
+ Type: AWS::EC2::RouteTable
+ Properties: 
+  VpcId: !Ref VPC
+  Tags: 
+  - Key: Name
+  Value: !Sub ${ProjectName}-piblic
+  - Key: project
+  Value: !Sub ${TagName}
+  
+//パブリックサブネット内のリソースがインターネットに接続できるようにデフォルトルートを追加し、インターネットゲートウェイ経由で外部へのアクセスを許可する
+DefaultGateway: 
+ Type: AWS::EC2::Route
+ DependsOn: IGWAttachment
+ Properties:
+  RouteTableId: !Ref PublicRouteTable
+  Tags: 
+  - Key: Name
+  Value: !sub ${ProjectName}-public
+  - Key: project
+  Value: !sub ${TagName}
+
+//ALBSubnet1とPublicRouteTableを関連付ける
+ALBSubnet1RouteTableAssociation:
+ Type: AWS::EC2::SubnetRouteTableAssosiation 
+ Properties:
+  RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref ALBSubnet1
+
+//ALBSubnet2とPublicRouteTableを関連付ける
+ALBSubnet2RouteTableAssociation:
+ Type: AWS::EC2::SubnetRouteTableAssosiation 
+ Properties:
+  RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref ALBSubnet2
+
+//NATSubnetとPublicRouteTableを関連付ける
+NATSubnetRouteTableAssociation:
+ Type: AWS::EC2::SubnetRouteTableAssosiation 
+ Properties:
+  RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref NATsubnet
+
+//プライベートサブネット用のルートテーブル
+PrivateRouteTable:
+  Type: AWS::EC2::RouteTable
+  Properties: 
+    VpcId: !Ref VPC
+    Tags:
+  - Key: Name
+  Value: !Sub ${ProjectName}-private-routes 
+  - Key: project
+  Value: !Sub ${TagName}
+
+//NATGateway用のルーティングをプライベートサブネット用のルートテーブルに追加する
+DefaultPrivateRoute:
+  Type: AWS::EC2::Route
+  DependsOn: NatGatewayPublic
+  Properties: 
+    RouteTableId: !Ref PrivateRouteTable
+    DestinationCidrBlocks: 0.0.0.0/0
+    NatGatewayId: !Ref NATGatewayPublic
+ECSSubnetGatewayRoute:
+  Type: AWS::EC2::SubnetRoutetableAssociation
+  Properties: 
+    RouteTableId: !Ref PrivateRouteTable
+        SubnetId: !Ref ECSSubnet
+RDSSubnet1RouteTableAssosiaton:
+  Type: AwS::EC2::SubnetRouteTableAssociation
+  Properties: 
+    RouteTableId: !Ref PrivateRouteTable
+        SubnetId: !Ref RDSSubnet1
+RDSSubnet2RouteTableAssociation:
+  Type: AWS::EC2::SubnetRouteTableAssociation
+  Properties: 
+    RouteTableId: !Ref PrivateRouteTable
+        SubnetId: !Ref RDSSubnet2
+ManagementSubnetRouteTableAssociation:
+  Type: AWS::EC2::SubnetRouteTableAssociation
+  Properties:
+    RouteTableId: !Ref PrivateRouteTable
+        SubnetId: !Ref ManagementSubnet
+
+
+  =================================================================
+
+IAMインスタンスプロファイル
+
+===============================================================
+//管理用EC2にセッションマネージャー経由で接続するためのIAMロール
+ManagementEC2Role: 
+  Type: AWS::IAM::Role
+  Properties:
+    RoleName: !Sub ${ProjectName}-ManagementEC2Role
+    AssumeRolePolicyDocument:
+      Version: "2012-10-07"
+      Statement:
+      - Effect: Allow
+        Principal: 
+          Service: ec2.amazonaws.com
+        Action: "sts:AssumeRole"
+  ManagedPolicyArns:
+      -arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+  Tags: 
+    -Key: Name
+    Value: !Sub ${ProjectName}-iam-management-ec2-role
+    -Key: project
+    Value: !Sub ${TagName}
+
+   
+
+//インスタンスプロファイルの作成
+ManagementEC2InstanceProfile:
+  Type: AWS::IAM::InstanceProfile
+  Properties:
+    Roles:
+      - !Ref ManagementEC2Role
+
+ManagementEC2InstanceProfile:
+  Type: AWS::IAM::InstanceProfile
+  Properties: 
+   Roles:
+    - !Ref: ManagementEC2Role
+
+
+
+
+//管理用EC2セキュリティグループ
+ManagementEC2SecurityGroup:
+  Type: AWS::EC2::SecurityGroup
+  Properties:
+    GroupDescription: Security Group for management EC2
+    VpcId: !Ref VPC
+    SecurityGroupIngress: []
+    SecurityGroupEngress:
+   -  CidrIp: 0.0.0.0/0
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+   -  CidrIp: 0.0.0.0/0
+      IpProtocol: tcp
+      FromPort: 80
+      ToPort: 80
+  Tags:
+   -  Key: Name
+      Value: !Sub ${ProjectName}-management-ec2-sg
+   -  Key: Name
+      Value: !Sub ${TagName}
+
+
+
+
+
+//管理用EC2からRDSへのアウトバウンドルール
+ManagementEC2ToRDSSecurityGroupEgress:
+  Type: AWS::EC2::SecurityGroupEgress
+  Properties:
+    IpProtocol: tcp
+    FromPort: 3306
+    ToPort: 3306
+    GroupId: !Ref ManagementEC2SecurityGroup
+    DestinationSecurituGroupId: !Ref RDSSecurityGroup
+
+
+================================================================
+
+EC2インスタンス
+
+=================================================================
+//管理用EC2インスタンスの作成
+ManagementEC2:
+  Type: AWS::EC2::Instance
+  Properties:
+    InstanceType: t2.micro
+    ImageId: !Ref: ManagementImageId
+    SubnetId: !Ref: ManagementSubnet
+    SecurityGroupIds:
+      - !Ref ManagementEc2SecurityGroup
+    IamInstanceProfile: !Ref ManagementEC2InstanceProfile 
+    Tags: 
+      - Key: Name
+        Value: !Sub ${ProjectName}-management-ec2
+      - Key: project
+        Value: !Sub ${TagName}
+
+
+====================================================================
+
+RDS
+
+=====================================================================
+//RDS用のセキュリティグループ
+RDSSecurityGroup:
+  Type: AWS::EC2::SecurityGroup
+  Properties: 
+    GroupDescription: Security group for RDS
+    VpcId: !Ref VPC
+    SecurotyGroupIngrss: 
+    -  IpProtocol: tcp
+       FromPort: 3306
+       ToPort: 3306
+       CidrIp: 10.0.0.0/16
+    SecurityGroupEgress: []
+    Tags:
+    - Key: Name
+      Value: !Sub ${ProjectName}-rds-sg
+    - Key: project
+      Value: !Sub ${TagName}
+
+
+
+//RDSサブネットグループ
+RDSSubnetGroup:
+  Type: AWS::RDS::DBSubnetGroup
+  Properties: 
+    DBSubnetGroupDescription: Subnet group for rds instance
+    SubnetIds:
+    - !Ref RDSSubnet1
+    - !Ref RDSSubnet2
+    DBSubnetGroupName: !Sub ${ProjectName}-SubnetGroup
+    Tags:
+    -  Key: Name
+     Value: !sub ${ProjectName}-rds-subnet-group
+    -  Key: project
+     Value: !sub ${TagName}
+
+
+
+
+  RDS:
+    Type: AWS::RDS:DBInstance
+    Properties: 
+      DBInstanceIdentifier: !Sub ${ProjectName}-MySQL-RDS
+      DBName: !Ref DBName
+      MasterUserName: !Ref MasterUsername
+      MasterUserPassword: !Ref MasterUserPassword
+      Engine: MYSQL
+      EngineVersion: 8.0
+      AllocatedStorage: 20
+      DBInstanceClass: db.t3.micro
+      StorageType: gp2
+      VPCSecurityGroups:
+       - !Ref RDSSecurityGroup
+      PubliclyAccessible: false
+      MultiAZ: false
+      BackupRetentionPeriod: 0
+      DBSubnetGroupName: !Ref RDSSubnetGroup
+      Tags:
+       - Key: Name
+       Value: !Sub ${ProjectName}-rds
+       - Key: project
+       Value: !Sub ${TagName}   
+
+=================================================================
+
+ALB
+
+=================================================================
+//ALB用のセキュリティグループ
+ALBSecurityGroup:
+ Type: AwS::EC2::SecurityGroup
+ Properties:
+  GroupDescription: Security group for ApplicationLoadBalancer
+  VpcId: !Ref VPC
+  SecurityGroupIngress: 
+   - IpProtocol: tcp
+     FromPort: 80
+       ToPort: 80
+       CidrIp: 0.0.0.0/0
+  SecurityGroupEgress:
+  - Ipprotocol: tcp
+     FromPort: 3000
+      ToPort: 3000
+      CidrIp: 10.0.0.0/16
+  Tags:
+   - Key: Name
+   Value: !Sub ${ProjectName}-alb-sg
+   - Key: project
+   Value: !Sub ${TagName}
+
+   //ALBリスナー
+   ALBListner:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties: 
+     LoadBalancerArn: !Ref ALB
+     Port: 80 --ALBが受け付けるポート
+     Protocol: HTTP
+     DefaultAcions: 
+     - Type: forward
+     TargetGroupArn: !Ref ALBTargetGroup
+
+   //ALBターゲットグループ
+   ALBTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties: 
+     Name: !Sub ${ProjectName}-target-group
+     VpcId: !Ref VPC
+     Port: 3000 --コンテナで受け取るポート
+     Protocol: HTTP
+     TargetType: ip
+     HealthCheckPath: /api/hello
+     Matcher:
+      HttpCode: 200
+     HealthCheckIntervalSeconds: 30
+     HealthCheckTimeoutSeconds: 5
+     HealthCheckThresholdCount: 5
+     UnHealthcheckThresholdCount: 2    
+
+ //ALB
+    ALB:
+     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+     Properties: 
+      scheme: internet-facing
+      subnets:
+      - !Ref ALBSubnet1
+      - !Ref ALBSubnet2
+      SecurityGroups:
+      - !Ref ALBSecurityGroup
+      Tags:
+      - Key: Name
+      Value: !Sub ${ProjectName}-alb
+      - Key: project
+      Value: !Sub ${TagName}
+
+
+
+Outputs:
+    RDSEndpoint: 
+      Description: DNS Name of RDS
+      Value: !GetAtt RDS.Endpoint.Address
+      Export:
+        Nmae: RDSEndpoint 
+    ALBEndpoint:
+      Description: DNS Name of ALB
+      Value: !GetAtt ALB.DNSName
+    VPC:
+      Description: VPC ID
+      Value: !Ref VPC
+      Export: 
+        Name: VPC
+    ECSSubnet:
+      Description: ECSSubnet ID
+      Value: !Ref ECSSubnet
+      Export:
+        Name: ECSSubnet
+    ALBSecurityGroup:
+      Description: SecurityGroup ID for  ALB
+      Value: !Ref ALBSecurityGroup
+      Export:
+        Name: ALBSecurityGroup
+    RDSSecurityGroup:
+      Description: SecurityGroup ID for  RDS
+      Value: !Ref RDSSecurityGroup
+      Export: 
+        Name: RDSSecurityGroup
+    ALBTargrtGroup:
+      Description: The ARN of the ALB Target Group
+      Value: !Ref ALBTargetGroup
+      Export:
+        Name: ALBTargrtGroup 
+     
+
+   
+
+
+
+
+
+
