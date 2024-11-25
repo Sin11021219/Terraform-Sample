@@ -233,50 +233,52 @@ ECSAutoScalingTarget:
 //スケーリングポリシー(CPU使用率が高い場合にスケールアップ)
 ECSAutoScalingPolicy:
   Type: AWS::ApplicationAutoScaling::ScalingPolicy
-  Properties: 
+  Properties:
     PolicyName: !Sub ${ProjectName}-ScalingPolicy
     PolicyType: TargetTrackingScaling
     ScalingTargetId: !Ref ECSAutoScalingTarget
-    TargetTrackingScalingPolicyConfiguration: 
-     PredefineMetricSpecification:
-      PredefinedMetricType: ECSServiceAverageCPUUtilization
-     TargetValue: 50.0
-     ScaleIndown: 60
-     ScaleOutdown: 60.0
-  ECSAutoScalingRole:
-     Type: AWS::IAM::Role
-     Properties:
-      RoleName: !Sub ${ProjectName}-autoscaling-role
-      AssumeRolePolicyDocument: 
-        Version: "2012-10-17"
+    TargetTrackingScalingPolicyConfigurartion:
+      PredefineMetricSpecification:  
+       PredefineMetricType: ECSServiceAverageCPUUtilization
+      TargetValue: 50.0
+      ScaleInCooldown: 60
+      ScaleOutCooldown: 60
+ECSAutoscalingRole: 
+  Type: AWS::IAM::Role
+  Properties: 
+    RoleName: !Sub ${ProjectName}-autoscaling-role
+    AssumeRolePolicyDocument:
+      Version: "2012-10-17"
+      Statement:
+        - Effect: Allow
+          Principal: 
+            Service: 
+              -application-autoscaling.amazonaws.com
+            Action: sts:AssumeRole
+    Path: /
+    Policies: 
+    - PolicyName: ECSAutoScalingPolicy
+      PolicyDocument:
+        Version: "2012-10-17"- 
         Statement: 
-      -  Effect: Allow
-         Principal:
-           Service:
-            - application-autoscaling.amazonaws.com
-         Ation: sts:AssumeRole
-      Path: /
-      Pollicies: 
-      - PolicyName: ECSAutoScalingPolicy
-        PolicyDocument:
-          Version: "2012-10-17"
-          Statement:
-            Effect: Allow
-            Action: 
-              -ecs: UpdateService
-              -ecs: DescribeService
-              -cloudwatch: PutMetricAlarm
-              -cloudwatch: DescribeAlarms
-              -cloudwatch: GetMetricStatistics
-              -application-autoscaling: *
+          - Effect: Allow
+            Action:
+            - ecs: UpdateService
+            - ecs: DescribeServices
+            - cloudwatch: PutMetricAlarm
+            - cloudwatch: DescribeAlarms
+            - cloudwatch: GetMetricStatistics
+            - application-autoscaling: *
             Resource: "*"
-      Tags:
-        - Key: Name
-         Value: !Sub ${ProjectName}-autoscaling-role
-        - Key: project
-        Value: !Sub ${TagName}
+    Tags:
+      - Key: Name
+      value: !Sub ${ProjectName}-autoscaling-role
+      - Key: project
+      Value: !Sub  ${TagName}
 
-    
+
+      
+
 
 
   
