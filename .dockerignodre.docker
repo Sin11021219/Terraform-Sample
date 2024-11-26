@@ -1,0 +1,24 @@
+// コンテナイメージを作成するために不必要なもの nextjs/.dockerignore
+//Node.js関連のファイルを無視
+node_modules
+
+//ローカルのビルド成果物やNext.jsのキャッシュ
+.next
+
+//環境設定ファイル (任意で指定)
+.evv
+.env.local
+.env.development
+.env.test
+.env.production
+
+//Git関連ファイル
+.git
+.gitignore
+
+//Docker関連ファイル
+Dockerfile
+docker-compose.yml
+
+
+
