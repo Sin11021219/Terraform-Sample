@@ -9,6 +9,21 @@ Parameters:
   Description: Tag name applied to all resources
   Type: String
   Default: EasyTODO
+ ManagementImageId: 
+  Type: AWS::SSM::Parameter::Value<String>
+  Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
+ DBName:
+  Type: String
+  Default: app_db
+ MasterUsername:
+  Type: String
+   Default: admin
+ MasterUserPassword: 
+  Type: String
+  NoEcho: true
+  Description: The master password for the RDS instance
+  MinLength: 8
+  MaxLength: 41
 
 
 Resources:
@@ -257,9 +272,159 @@ ManagementSubnetRouteTableAssociation:
   RouteTableId: !Ref PrivateRouteTable
   SubnetId: !Ref ManagementSubnet
 
+==================================================================
 
-  
-  
+管理用EC2
+
+==================================================================
+ //管理用EC2にセッションマネージャー経由で接続するためのIAMロール
+ ManagementEC2Role:
+  Type: AWS::IAM::Role
+  Properties: 
+   RoleName: !Sub ${ProjectName}-ManagementEC2Role
+   AssumeRolePolicyDocument:
+    Version: "2012-10-17"
+    Statement: 
+    -Effect: Allow
+     Principal: 
+      Service: ec2.amazonaws.com
+     Action: "sts:AssumeRole"
+   ManagedPolicyArns:
+    -arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+   Tags:
+   - Key: Name
+   Value: !Sub ${projectName}-iam-management-ec2-role
+   - Key: project
+   Value: !Sub ${TagName}
+
+//IAMインスタンスプロファイルの作成
+ManagementEC2InstanceProfile:
+ Type: AWS::IAM::InstanceProfile
+ Properties: 
+  Roles: 
+   -!Ref ManagementEC2Role
+
+//管理用EC2のセキュリティグループ
+ManagementEC2SecurotyGroup:
+ Type: AWS::EC2::SecurityGroup
+ Properties: 
+  GroupDescription: Security group for management EC2
+  VpcId: !Ref VPC
+  SecurityGroupIngress: []
+  SecurityGroupEgress:
+  - CidrIp: 0.0.0.0/0
+    IpProtocol: tcp
+    FromPort: 443
+    ToPort: 443
+  - CidrIp: 0.0.0.0/0
+    FromPort: 80
+    ToPort: 80
+  Tags:
+  - Key: Name
+  Value: !Sub ${ProjectName}-management-ec2-sg
+  - Key: project
+  Value: !Sub ${TagName}
+
+//管理用EC2からRDSへアウトバウンドルール
+ManagementEC2ToRDSSecurityGroupEgress:
+ Type: AWS::EC2::securityGroupEgress
+ Properties: 
+  Ipprotocol: tcp
+  FromPort: 3306
+  ToPort: 3306
+  GroupId: !Ref ManagementEC2SecurityGroup
+  DestinationSecurityGroupId: !Ref RDSSecurityGroup
+
+//管理用EC2インスタンスの作成
+ManagementEC2:
+ Type: AWS::EC2::Instance
+ Properties: 
+  InstanceType: t2.micro
+  ImageId: !Ref ManagementImageId
+  SubnetId: !Ref ManagementSubnet
+  SecurityGroupIds:
+   !Ref ManagementEC2SecurityGroup
+  IamInstanceProfile: !Ref ManagementEC2InstanceProfile
+  Tags:
+  - Key: Name
+  Value: !Sub ${ProjectName}-management-ec2
+  - Key: project
+  Value: !Sub ${TagName}
+
+==========================================
+
+RDS
+
+===========================================
+//RDSセキュリティグループ
+RDSSecurityGrouo:
+  Type: AWS::EC2::SecurityGroup
+  Properties: 
+   GroupDescription: Security group for RDS
+   VpcId: !Ref VPC
+   SecurityGroupIgress:
+    - IpProtocol: tcp
+      FromPort: 3306
+      ToPort: 3306
+      CidrIp: 10.0.0.0/16
+   SecurityGroupEgress: []
+   Tags:
+   - Key: Name
+   Value: !Sub ${ProjectName}-rds-sg
+   - Key: project
+   Value: !sub ${TagName}
+
+//RDSのサブネットグループ
+RDSSubnetGroup: 
+ Type: AWS::RDS::DBSubnetGroup
+ Properties: 
+  DBSubnetGroupDescription: Subnet group for RDS instance
+  SubnetIds:
+  - !Ref RDSSubnet1
+  - !Ref RDSSubnet2
+  DBSubnetGroupName: !Sub ${ProjectName}-SubnetGroup
+  Tags: 
+  - Key: Name
+  Value: !Sub ${ProjectName}-rds-subnet-group
+  - Key: project
+  Value: !Sub ${TagName}
+
+RDS: 
+ Type: AWS::RDS::DBInstance
+ Properties: 
+  DBInstanceIdentifier: !Sub ${ProjectName}-MYSQL-RDS
+  DBName: !Ref DBName
+  MasterUsername: !Ref MasterUserName
+  MasterUserPassword: !Ref MasterUserPassword
+  Engine: MySQL
+  EngineVersion: 8.0
+  AllocatedStorage: 20
+  DBInstanceClass: db.t3.micro
+  StorageType: gp2
+  VPCSecurityGroups:
+   !Ref RDSSecurityGroup
+  PubluclyAccessible: false
+  MultiAZ: false
+  BackupRetentionPeriod: 0
+  DBSubnetGroupName: !Ref RDSSecurityGroup
+  Tags: 
+  - Key: Name
+  Value: !Sub ${ProjectName}-rds
+  - Key: project
+  Value: !Sub ${TagName}
+
+  Outputs:
+   RDSEndpoint:
+    Description: DNS Name of RDS
+    Value: !GetAtt RDS.Endpoint.Address
+    Export:
+     Name: RDSEndpoint     
+
+
+ 
+ 
+
+
 
    
 
