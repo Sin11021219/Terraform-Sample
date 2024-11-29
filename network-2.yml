@@ -413,18 +413,89 @@ RDS:
   - Key: project
   Value: !Sub ${TagName}
 
+
+=======================================================
+
+ALB
+
+========================================================
+ALBSecurityGroup:
+ Type: AWS::EC2::SecurityGroup
+ Properties:
+  GroupDescription: Security group for ApplicationLoadBalancer
+  VpcId: !Ref VPC
+  SecurityGroupIngress:
+   - IpProtocol: tcp
+     FromPort: 80
+     ToPort: 80
+     CidrIp: 0.0.0.0/0
+  SecurityGroupEgress:
+  - Ipprotocol: tcp
+    FromPort: 3000
+    ToPort: 3000
+    CidrIp: 10.0.0.0/16
+  Tags: 
+  - Key: Name
+  Value: !Sub ${Projectname}
+  - Key: project
+  Value: !Sub ${TagName}
+//ALBリスナー
+ALBListener:
+ Type: AWS::ElasticLoadBalancerV2::Listener
+ Properties: 
+  LoadBalancerArn: !Ref ALB
+  Port: 80 //ALBが受け付けるポート
+  Protocol: HTTP 
+  DefaultActions:
+    - Type: forward
+    TargetGroupArn: !Ref ALBTargetGroup
+//ALBターゲットグループ
+ALBTargetGroup:
+ Type: AwS::ElasticLoadBalancerV2::TargetGroup
+ Properties: 
+  Name: !Sub ${ProjectName}-target-group
+  VpcId: !Ref VPC
+  Port: 3000 //コンテナで受け取るポート
+  Protocol: HTTP
+  TargetType: ip
+  HealthCheckPath: /api/hello
+  Matcher:
+    HttpCode: 200
+  HealthCheckIntervalSeconds: 30
+  HealthCheckTimeoutSeconds: 5
+  HealthyThresholdCount: 5
+  UnHealthyThresholdCount: 2
+
+ALB:
+ Type: AwS::ElasticLoadBalancerV2:LoadBalancer
+ Properties:
+  Scheme: internet-facing
+  Subnets:
+  - !Ref ALBSubnet1
+  - !Ref ALBSubnet2
+  SecurityGroups:
+  - !Ref ALBSecurityGroup
+  Tags:
+  -Key: Name
+  Value: !Sub ${ProjectName}-alb
+  - Key: project 
+  Value: !Sub ${TagName}
+
+
+
+ 
   Outputs:
    RDSEndpoint:
     Description: DNS Name of RDS
     Value: !GetAtt RDS.Endpoint.Address
     Export:
-     Name: RDSEndpoint     
+     Name: RDSEndpoint   
 
-
- 
- 
-
-
+   ALBEndpoint:
+    Description: DNS Name of ALB
+    Value: !GetAtt ALB.DNSName
+    Export: 
+     Name: ALBEndpoint  
 
    
 
