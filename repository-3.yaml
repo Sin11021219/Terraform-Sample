@@ -1,0 +1,125 @@
+AWSTemplteFormatVersion: 2010-09-09
+
+Parameters:
+ ProjectName:
+   Description: Project Name
+   Type: Strring
+   Default: EasyTODO
+ TagName:
+   Description: Tag Name applied to all resources
+   Type: String
+   Default: EasyTODO
+
+Resources:
+//ECRにコンテナイメージを登録する用のIAMユーザー
+ ECRPushUser:
+  Type: AWS::IAM::User
+  Properties: 
+   UserName: !Sub ${ProjectName}-ecr-push-user
+   Policies: 
+    - PolicyName: !Sub ${ProjectName}-eccr-policy
+      PolicyDocumet: 
+       Version: "2012-10-17"
+       Statement: 
+       - Effect: Allow
+         Action:
+         - ecr: GetDownloadUrlForLayer
+         - ecr: BatchGetImage
+         - ecr: BatchCheckLayerAvailabiliity 
+         - ecr: PutImage
+         - ecr: InitiateLayerUpload
+         - ecr: UploadLayerPart
+         - ecr: CompleteLayerUpload
+        Resource:
+         - !Sub arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/easytodo/migrate   
+         - !Sub arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/easytodo/app   
+         Effect: Allow
+         Action:
+         - ecr: GetAuthorizationToken
+         Resource: "*"
+  Tags:
+  - Key: Name
+  Value: !Sub ${ProjectName}-ecr-iam-user
+  - Key: project
+  Value: !Sub ${TagName}
+
+  //migrete用のリポジトリ
+  ECRMigrate:
+   Type: AWS::ECR::Repository
+   Properties: 
+    RepositoryName: easytodo/migrate
+    LifecyclePolicy:
+     LifecyclePolicyText:
+      {
+        "rules": [
+          {
+            "rulePriority": 1,
+            "description": "All images",
+            "selection": {
+              "tagStatus": "any",
+              "countType": "imageCountMoreThan",
+              "countNumber": 5
+            },
+            "action": {
+              "type": "expire"
+            }
+          }
+        ]
+     }
+  Tags:
+    - Key: Name
+    Value: !Sub ${ProjectName}-ecr-migrate
+    - Key: project
+    Value: !Sub ${TagName}
+
+  //app用のリポジトリ
+  ECRApplication:
+   Type: AWS::ECR::Repository
+   Properties: 
+    RepositoryName: easytodo/app
+    LifecyclePolicy:
+     LifecyclePolicyText:
+      {
+        "rules": [
+          {
+            "rulePriority": 1,
+            "description": "All images",
+            "selection": {
+              "tagStatus": "any",
+              "countType": "imageCountMoreThan",
+              "countNumber": 5
+            },
+            "action": {
+              "type": "expire"
+            }
+          }
+        ]
+     }
+    Tags:
+    - Key: Name
+    Value: !Sub ${ProjectName}-ecr-app
+    - Key: project
+    Value: !Sub ${TagName}
+    
+Outputs:
+ ECRMigrateRepositoryUri:
+  Description: URI of the migrate ECR repository
+  Value: !GetAtt ECRMigrate.RepositoryUri
+ ECRApplicationRepositoryUri:
+  Description: URI of the app ECR repository 
+  Value: !GetAtt ECRApplication.RepositoryUri
+ ECRPushUserName:
+  Description: The IAN User for pushing to ECR]
+  Value: !Ref ECRPushUser
+
+  
+    
+          
+        
+      
+
+
+
+
+
+   
