@@ -1,0 +1,147 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Parameters: 
+ ProjectName: 
+  Description: Project Name
+  Type: String
+  Default: EasyTODO
+ TagName: 
+  Description: Tag Name applied to all resources
+  Type: String
+  Default: EasyTODO
+ ApplicationImageTag:
+  Desription: The tag of the Docker image for the application
+  Type: String
+  Default: latest
+
+Resources:
+===============================================================
+ECS
+==============================================================
+//クラスターの作成
+Cluster:
+ Type: AWS::EC2::Cluster
+ Properties: 
+  ClusterName: !Sub ${ProjectName}-cluster
+
+//タスク実行IAMロール
+ECSTaskExecutionRole:
+ Type: AWS::IAM::Role
+ Properties: 
+  RoleName: !Sub ${ProjectName}-ecs-task-role
+  AssumeRolePolicyDocument: 
+   Version: "2012-10-17"
+   Statement:
+    - Effect: Allow
+      Principal:
+       Service: ecs-tasks.amazonmaws.com
+      Action: sts:AssumeRole
+ Policies: 
+ - PolicyName: EasyTODOTaskExecutionPolicy
+   PolicyDocument: 
+    Version: "2012-10-17"
+    Statement: 
+    //ECRからイメージを取得するための権限
+    - Effect: Allow
+      Action:
+      - ecr: GetDownloadUrlForLayer
+      - ecr: BatchGetImage
+      - ecr: BatchCheckLayerAvailability
+      - ecr: GetAuthorizationToken
+      Resource: "*"
+    // Cloudwatch Logsへのアクセス権限
+    - Effect: Allow
+      Action:
+      - logs: CreateLogStream
+      - logs: PutLogEvents
+      - logs: CreateLogGroup
+      Resource: "*"
+    // パラメータストアからSecureStringを取得するための権限
+    - Effect: Allow
+      Action:
+      - ssm: GetParameters
+      - ssm: GetParameter
+      - ssm: GetParameterHistory
+      - kms: Decrypt
+      Resource: "*"
+ Tags:
+ - Key: Name
+ Value: !Sub ${ProjectName}-ecs-task-role
+ - Key: project
+ Value: !Sub ${TagName}
+
+//セキュリティグループ
+ECSTaskSecurityGroup:
+  Type: AWS::EC2::SecurityGroup
+  Properties:
+   GroupDescription: Security group for ECS Task
+   VpcId: !ImportValue VPC
+   SecurityGroupIngress:
+    - IpProtocol: tcp
+      FromPort: 3000
+      ToPort: 3000
+      SourceSecurityGroupId: !ImportValue ALBSecurityGroup
+   SecurityGroupEgress:
+    - IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      CidrIp: 0.0.0.0/0
+    - IpProtocol: tcp
+      FromPort: 3306
+      ToPort: 3306
+      DestinationSecurityGroupId: !ImportValue RDSSecurityGroup
+   Tags:
+  - Key: Namme
+  Value: !Sub ${ProjectName}-ecs-task-sg
+  - Key: project
+  Value: !Sub ${TagName}
+
+//タスク定義 (migration)
+MigrationTaskDefinition:
+ Type: AWS::ECS::TaskDefinition
+ Properties: 
+  Family: easytodo-migration
+  Cpu: 256
+  Memory: 512
+  NetworkMode: awsvpc
+  ExecutionRoleArn: !GetAtt ECSTaskExecutionRole.Arn
+  ContainerDefinitions:
+   Name: easytodo-migration
+   Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/easytodo/migrate:${ApplicationTag}
+   Essential: true
+   Environment: 
+   - Name: NODE_ENV
+   Value: "production"
+   Secrets: 
+   - Name: DATABASE_URL
+   Value: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/easytodo/database-url
+   LogConfiguration:
+    LogDriver: awslogs
+    Options:  
+     awslogs-group: !Sub /${AWS::StackName}/ecs/migration
+     awslogs-region: !Ref AWS::Region
+     awslogs-stream-prefix: easytodo
+
+ //Cloudwatch Logロググループ作成 (migration)
+ MigrationGroup:
+  Type: AWS::Logs::LogGroup
+  Properties: 
+   LogGroupName: !Sub /${AWS::StackName}/ecs/migration
+   RetentionInDays: 7
+   Tags:
+  - Key: Name
+  Value: !Sub ${ProjectName}-migration-logs
+  - Key: project
+  Value: !Sub ${TagName}
+
+Outputs:
+  ECSSecurityGroup:
+  Description: SecurityGroup for ECS
+  Value: !Ref ECSTaskSecurityGroup
+   Export: 
+     Name: ECSSecurityGroup
+
+
+  
+
+
