@@ -202,8 +202,69 @@ ECSService:
   - Key: project
   Value: !Sub ${TagName}
 
+==================================================================
+AutoScaling
+==================================================================
+//AutoScalingターゲットの作成
+ECSAutoScalingTarget:
+ Type: AWS::ApplicationAutoScaling::ScalableTarget
+ DependsOn: ECSService
+ Properties: 
+  MaxCapacity: 2
+  MinCapacity: 1
+  ResourceId: !Sub "service/${Cluster}/${ProjectName}-ecs-service"
+  RoleArn: !GetAtt ECSAutoScalingRole.Arn
+  ScalableDimension: ecs:service:DesiredCount
+  ServiceNameSpace: ecs
+//スケーリングポリシー(CPU使用率が高い場合にスケールアップ)
+ECSAutoScalingPolicy:
+ Type: AWS::ApplicationAutoScaling::ScalingPolicy
+ Properties: 
+  PolicyName: !Sub ${projectName}-ScalingPolicy
+  PolicyType: TargetTrackingScaling
+  ScalingTargetId: !Ref ECSAutoScalingTarget
+  TargetTrackingScalingPolicyConfiguration: 
+   PredefinedMetricSpecification:
+    PredefinedMetricType: ECSServiceAverageCPUUtilization
+  TargetValue: 50.0
+  ScaleInCooldown: 60
+  ScaleOutCooldown: 60
+ECSAutoScalingRole:
+ Type: AWS::IAM::Role
+ Properties: 
+  RoleName: !Sub ${ProjectName}-autoscaling-role
+  AssumeRolePolicyDocument:
+   Version: "2012-10-17"
+   Statement: 
+   - Effect: Allow
+     Pricipal: 
+      Service: 
+       - application-autoscaling.amazonaws.com
+    Action: sts:AssumeRole
+ path: /
+ Policies: 
+ - PolicyName: ECSAutoScalingPolicy
+   PolicyDocument:
+      Version: "2012-10-17"
+      Statement: 
+      - Effect: Allow
+        Action:
+        - ecs:UpdateService
+        - ecs:DescibeServices
+        - cloudwatch:PutMetricAlarm
+        - cloudwatch:DescribeAlarms
+        - cloudwatch:GetMetricStastics
+        - applicaton-autoscaling:*
+      Resource: "*"
 
+ Tags:
+ - Key: Name
+ Value: !Sub ${ProjectName}-autoscaling-role
+ - key: project
+ Value: !Sub ${TagName}
 
+ 
+      
 
 
 
