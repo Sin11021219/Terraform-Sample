@@ -134,14 +134,86 @@ MigrationTaskDefinition:
   - Key: project
   Value: !Sub ${TagName}
 
+//タスク定義(app)
+AppTaskDefiniton: 
+ Type: AWS::EC2::TaskDefinition
+ Properties: 
+  Family: easytodo-app
+  Cpu: 256
+  Memory: 512
+  NetworkMode: awsvpc
+  RequiresCompatibilities: 
+  - FARAGET
+  ExecutionRoleArn: !GetAtt ECSTaskExecutionRole.Arn
+  ContainerDefinitions: 
+  - Name: easytodo-app
+    Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/easytodo/app:${ApplicationImageTag}
+    PortMappings: 
+    - ContainerPort: 3000
+      Protocol: tcp
+    Environment: 
+    - Name: NODE_ENV
+      Value: "production"
+    Secrets:
+    - Name: DATABASE_URL
+     ValueFrom: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/easytodo/database-url 
+    LogConfiguration: 
+     LogDriver: awslogs
+     Options: 
+      awslogs-group: !Sub /${AWS::StackName}/ecs/app
+      awslogs-regipn: !Ref AWS::Region
+      awslogs-stream-prefix: easytodo
+
+  //Cloudwatch Logロググループの作成(app)  
+ApplicationLogGroup:
+ Type: AWS::Logs::LogGroup
+ Properties:
+  LogGroupName: !Sub /${AWS::StackName}/ecs/app
+  RetentionInDays: 7
+  Tags:
+  - Key: Name
+  Value: !Sub ${ProjectName}-app-logs
+  - Key: project
+  Value: !Sub ${TagName}
+
+//ECSサービスの作成
+ECSService: 
+ Type: AWS::ECS::Service
+ Properties: 
+  Cluster: !Ref Cluster
+  ServiceName: !Sub ${ProjectName}-ecs-service
+  DesiredCount: 1
+  TaskDefiniton: !Ref ApplicationDefinition
+  LaunchType: FARGATE
+  LoadBalancers: 
+   - ContainerName: easytodo-app
+     ContainerPort: 3000
+     TargetGroupArn: !ImportValue ALBTargetGroup
+  NetworkConfiguration:
+   AwsvpcConfiguration: 
+    Subnets: 
+    - !ImportValue ECSSubnet
+    SecurityGroups:
+    - !Ref ECSTaskSecutiyGroup
+    AssignPublicIp: DISABLED
+  Tags:
+  - Key: Name
+  Value: !Sub ${ProjectName}-ecs-service
+  - Key: project
+  Value: !Sub ${TagName}
+
+
+
+
+
+
+
+  
+
+
 Outputs:
   ECSSecurityGroup:
   Description: SecurityGroup for ECS
   Value: !Ref ECSTaskSecurityGroup
    Export: 
      Name: ECSSecurityGroup
-
-
-  
-
-
