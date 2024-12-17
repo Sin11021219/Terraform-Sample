@@ -123,3 +123,8 @@ ManagementSubnet:
   Value: !Sub ${ProjectName}-management-private-subnet-1a
   - Key: project
   Value: !Sub ${TagName}
+
+
+
+
+  
